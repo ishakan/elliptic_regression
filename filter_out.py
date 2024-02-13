@@ -41,7 +41,7 @@ def filter_out_mutli_cells(image_to_filter, imgmin, pili):
         (x, y, w, h) = cv2.boundingRect(icontour)
         # print("first stage?")
         if (area > 50):
-            print(x, y, w, h)
+            # print(x, y, w, h)
             try:
                 # print("okayyyy")
                 area2 = cv2.contourArea(icontour)

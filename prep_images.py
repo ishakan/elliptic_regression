@@ -1,5 +1,7 @@
 import cv2
 import numpy as np
+import prep_images
+import overlap
 
 def cart2pol(x, y):
     theta = np.arctan2(y, x)
@@ -34,6 +36,160 @@ def rotate_contour2(cnt, angle):
     cnt_rotated = cnt_rotated.astype(np.int32)
 
     return cnt_rotated
+
+def takeout(base_frame, image3, angleAdjust, adjustX, adjustY, count_which, store_contours):
+    hsv = cv2.cvtColor(base_frame, cv2.COLOR_BGR2HSV)
+    hsv3 = cv2.cvtColor(image3, cv2.COLOR_BGR2HSV)
+
+    lower_green = np.array([35, 55, 90])  # Adjust the thresholds as needed
+    upper_green = np.array([80, 255, 255])
+
+    base_mask = cv2.inRange(hsv, lower_green, upper_green)
+
+
+    maskGreen = 0
+
+    averageGreenPixelVal = prep_images.findAverageRGBValues(image3, count_which)
+
+    ratio2 = (95-88) / (210-175)
+    if (averageGreenPixelVal <= 150):
+        maskGreen = 85
+    elif (210 > averageGreenPixelVal > 175):
+        maskGreen = 88 + (ratio2 * (averageGreenPixelVal - 175))
+        maskGreen = int(maskGreen)
+    elif (averageGreenPixelVal <= 175):
+        maskGreen = 88
+    elif (averageGreenPixelVal >= 210):
+        maskGreen = 95
+
+
+    lower_green = np.array([35, 55, maskGreen])  # Adjust the thresholds as needed
+    upper_green = np.array([80, 255, 255])
+
+    image3_mask = cv2.inRange(hsv3, lower_green, upper_green)
+
+
+    rotatedImage = prep_images.rotate_image(base_mask, angleAdjust, count_which)
+    rotatedImage_image3 = prep_images.rotate_image(image3_mask, angleAdjust, count_which)
+
+    base_mask = cv2.cvtColor(rotatedImage, cv2.COLOR_GRAY2BGR)
+    base_mask = cv2.cvtColor(base_mask, cv2.COLOR_BGR2HSV)
+
+    image3_mask = cv2.cvtColor(rotatedImage_image3, cv2.COLOR_GRAY2BGR)
+    image3_mask = cv2.cvtColor(image3_mask, cv2.COLOR_BGR2HSV)
+
+    lower_white = np.array([0, 0, 200])  # Adjust the thresholds as needed
+    upper_white = np.array([255, 30, 255])
+    white_mask = cv2.inRange(base_mask, lower_white, upper_white)
+    white_image3mask = cv2.inRange(image3_mask, lower_white, upper_white)
+
+
+    baseCnts, h = cv2.findContours(white_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    cnt_sizedUp = np.round(baseCnts[0] * [1.0, 1.0]).astype(int)
+
+    cnt_rotated2 = cnt_sizedUp + [adjustX, adjustY]
+    # cv2.drawContours(image3, [cnt_rotated2], 0, (255, 255, 0), cv2.FILLED)
+
+    cv2.drawContours(white_image3mask, [cnt_rotated2], 0, (80, 80, 0), cv2.FILLED)
+
+    lower_white = np.array([0, 0, 200])  # Adjust the thresholds as needed
+    upper_white = np.array([255, 30, 255])
+
+    white_image3mask = cv2.cvtColor(white_image3mask, cv2.COLOR_GRAY2BGR)
+    white_image3mask = cv2.cvtColor(white_image3mask, cv2.COLOR_BGR2HSV)
+
+    white_image3mask = cv2.inRange(white_image3mask, lower_white, upper_white)
+
+    graycnts, h = cv2.findContours(white_image3mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+
+    beggining_l = len(store_contours)
+    for e in range(beggining_l - 1, -1, -1):
+        intersects_check = False
+        largestContour = -1
+        index = -1
+        for a in range(len(graycnts)):
+            intersects = overlap.overlap_percentage2(store_contours[e], graycnts[a], count_which)
+            intersects2 = overlap.overlap_percentage2(graycnts[a], store_contours[e], count_which)
+            if (intersects == True or intersects2 == True):
+                if (cv2.contourArea(graycnts[a]) > largestContour):
+                    largestContour = cv2.contourArea(graycnts[a])
+                    index = a
+                intersects_check = True
+
+        if (intersects_check):
+            store_contours[e] = graycnts[index]
+        else:
+            store_contours.pop(e)
+
+
+
+    cv2.imwrite("output_images/WHITEIMAGE3%d.jpg" % count_which, white_image3mask)  # saves frame as JPEG file
+
+    # print(len(store_contours), count_which, "StORED CONTOURRRS")
+    return store_contours
+
+
+def findAverageRGBValues(image3, count_which):
+
+    lower_green = np.array([35, 55, 90])  # Adjust the thresholds as needed
+    upper_green = np.array([80, 255, 255])
+    hsv = cv2.cvtColor(image3, cv2.COLOR_BGR2HSV)
+
+    mask = cv2.inRange(hsv, lower_green, upper_green)
+
+    result = cv2.bitwise_and(image3, image3, mask=mask)
+
+    non_black_mask = (result[:, :, 0] != 0) & (result[:, :, 1] != 0) & (result[:, :, 2] != 0)
+
+    # Apply the mask to get non-black pixels in the green channel
+    green_pixels = result[non_black_mask, 1]  # Index 1 corresponds to the green channel
+
+    average_green = np.average(green_pixels)
+
+    # print(np.average(result[:, :, 1], where=(result != 0)))  # replace 0 with 1 for green channel and with 2 for blue channel
+
+    # average_rgb_values = np.mean(result, axis=(0, 1), where=(result != 0))
+
+    print(average_green, "AVERAGE PIXEL VALUES", count_which)
+    return average_green
+
+
+def rotate_contour(image, contour, angle, count_which):
+
+    angle = 180
+
+    M = cv2.moments(contour)
+    if M['m00'] != 0:
+        cx = int(M['m10'] / M['m00'])
+        cy = int(M['m01'] / M['m00'])
+    else:
+        # Avoid division by zero if contour is a line
+        cx, cy = 0, 0
+
+    # Get the rotation matrix
+    rotation_matrix = cv2.getRotationMatrix2D((cx, cy), angle, 1.0)
+
+    # Perform the rotation
+    rotated_image = cv2.warpAffine(image, rotation_matrix, (image.shape[1], image.shape[0]))
+    cv2.imwrite("output_images/rotated_image%d.jpg" % count_which, rotated_image)  # saves frame as JPEG file
+
+    return rotated_image
+
+
+def rotate_image(image, angle, count_which):
+    height, width = image.shape[:2]
+    centerX, centerY = (width // 2, height // 2)
+
+    M = cv2.getRotationMatrix2D((centerX, centerY), angle, 1.0)
+    rotated = cv2.warpAffine(image, M, (width, height))
+    cv2.imwrite("output_images/ARotatedImage%d.jpg" % count_which, rotated)  # saves frame as JPEG file
+
+
+    return rotated
+
+
 
 def draw_elipse(input_mask, target_img):
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -171,6 +327,9 @@ def find_base_frame(count, x, y, w, h, count_which):
     base_frame_num = 0
     min_amount_of_pix = 10000000
     const = 0
+
+    allPairs = []
+
     while i < count:
         img = cv2.imread("vid_images/frame%d.jpg" % i)
         # print("RUN?")
@@ -179,16 +338,51 @@ def find_base_frame(count, x, y, w, h, count_which):
 
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-        lower_green = np.array([35, 55, 110])  # Adjust the thresholds as needed
-        upper_green = np.array([80, 255, 255])
+        # lower_range = np.array([35, 55, 90])  # Adjust the thresholds as needed
+        # upper_range = np.array([80, 255, 255])
 
-        mask = cv2.inRange(hsv, lower_green, upper_green)
+        upper_green = np.array([80, 255, 255])
+        averageGreenPixelVal = prep_images.findAverageRGBValues(img, count_which)
+
+        maskGreen = 0
+
+        ratio2 = (95 - 88) / (210 - 175)
+        if (averageGreenPixelVal <= 150):
+            maskGreen = 85
+        elif (210 > averageGreenPixelVal > 175):
+            maskGreen = 88 + (ratio2 * (averageGreenPixelVal - 175))
+            maskGreen = int(maskGreen)
+        elif (averageGreenPixelVal <= 175):
+            maskGreen = 88
+        elif (averageGreenPixelVal >= 210):
+            maskGreen = 95
+
+        LowerGreen = np.array([35, 55, maskGreen])  # Adjust the thresholds as needed
+        #
+        # base_mask = cv2.inRange(hsv, LowerGreen, upper_green)
+        #
+        #
+        #
+        #
+        #
+        # lower_green = np.array([35, 55, 90])  # Adjust the thresholds as needed
+        # upper_green = np.array([80, 255, 255])
+
+        mask = cv2.inRange(hsv, LowerGreen, upper_green)
         white_pixel_count = np.sum(mask == 255)
+
+        pair = (white_pixel_count, i)
+        allPairs.append(pair)
 
         if (white_pixel_count < min_amount_of_pix):
             min_amount_of_pix = white_pixel_count
             base_frame_num = i
         i += 1
+
+    sorted_pairs = sorted(allPairs, key=lambda x: x[0])
+    print(sorted_pairs)
+    print("PAIRSSSSSS")
+    base_frame_num = sorted_pairs[1][1]
 
     return base_frame_num
 ## dealing with trasslation about cells

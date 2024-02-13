@@ -5,7 +5,9 @@ import count_pili
 import filter_out
 
 
-vidcap = cv2.VideoCapture('videos/NDC0142.001.mov')
+## 373 - 0, program said 1
+
+vidcap = cv2.VideoCapture('videos/TND0905.001.mov')
 
 success, image = vidcap.read()
 #hi
@@ -81,6 +83,7 @@ for pilicnt in pilicnts:
     pili_hsv = cv2.cvtColor(cropped_pili, cv2.COLOR_BGR2HSV)
     area12 = cv2.contourArea(pilicnt)
 
+
     lower_white = np.array([0, 0, 200])  # Adjust the thresholds as needed
     upper_white = np.array([255, 30, 255])
     white_mask = cv2.inRange(pili_hsv, lower_white, upper_white)
@@ -90,13 +93,13 @@ for pilicnt in pilicnts:
     # print(, "ratio")
     ratio = num_of_white_pix / area12
     if (ratio > 0.7):
-        print(area12, "area")
+        # print(area12, "area")
         cv2.putText(pili, "filtered out",
                     (x + (w // 2), y + (h // 2)), cv2.FONT_HERSHEY_COMPLEX, 0.5,
                     (255, 255, 0), 2)
-        print(ratio, "ratio")
-
-        print(num_of_white_pix, "Num of White Pix")
+        # print(ratio, "ratio")
+        #
+        # print(num_of_white_pix, "Num of White Pix")
 
     else:
         cv2.drawContours(filtered_mask2, [pilicnt], -1, [255, 255, 255], cv2.FILLED)
@@ -115,11 +118,16 @@ for grays in graycnts:
 
     if (area12 > 15):
         count_which += 1
+#280 ] ,
+        if (count_which < 0 or count_which > 100):
+            continue
 
         const = 0
         (x, y, w, h) = cv2.boundingRect(grays)
 
         base_frame_num = prep_images.find_base_frame(count, x, y, w, h, count_which)
+
+        # base_frame_num = 53
         base_frame = cv2.imread("vid_images/frame%d.jpg" % base_frame_num)
         base_frame = base_frame[y - const:y + h + const, x - const:x + w + const]
 

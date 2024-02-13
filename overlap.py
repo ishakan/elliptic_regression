@@ -36,7 +36,7 @@ import cv2
 
 import cv2
 
-def overlap_percentage2(contour1, contour2):
+def overlap_percentage2(contour1, contour2, count_which):
     x1, y1, w1, h1 = cv2.boundingRect(contour1)
     x2, y2, w2, h2 = cv2.boundingRect(contour2)
 
@@ -63,12 +63,16 @@ def overlap_percentage2(contour1, contour2):
     intersection_area = (x2 - x1) * (y2 - y1)
 
     # Calculate the overlap percentage
+
     overlap_percentage = (intersection_area / min(area1, area2)) * 100
-    if (overlap_percentage < 35):
+
+    # if (count_which < 15):
+    print(overlap_percentage, "OVERLAP", count_which)
+
+    if (overlap_percentage < 30):
         return False
     else:
         return True
-    # print(overlap_percentage, "OVERLAP")
     # return overlap_percentage
 
 
